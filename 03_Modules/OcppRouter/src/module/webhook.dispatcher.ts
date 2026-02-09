@@ -143,10 +143,18 @@ export class WebhookDispatcher {
       let callAction = undefined;
       switch (messageTypeId) {
         case MessageTypeId.Call:
+          // see router.ts, again ignore SecurityEventNotification as it is not supported in OCPP 1.6
+          if (protocol === 'ocpp1.6' && rpcMessage[2] === 'SecurityEventNotification') {
+            this._logger.debug(
+              `Ignoring unsupported OCPP 1.6 action '${rpcMessage[2]}' from ${identifier} (messageId=${messageId})`,
+            );
+            break;
+          }
+
           try {
             callAction = mapToCallAction(protocol, rpcMessage[2]);
           } catch (error) {
-            this._logger.warn(`Failed to map call action ${callAction} for ${messageId}`, error);
+            this._logger.warn(`Failed to map call action ${rpcMessage[2]} for ${messageId}`, error);
           }
           if (relatedMessage && !relatedMessage.action) {
             // Update the related message with the correct action if it was missing

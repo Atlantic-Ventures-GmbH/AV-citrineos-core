@@ -480,6 +480,31 @@ export class MessageRouterImpl extends AbstractMessageRouter implements IMessage
 
     let action = null;
 
+    // filter out some illegal OCPP 1.6 actions that shall have not action like SecurityEventNotification
+    // some chargers that you can switch between OCPP 1.6 and 2.0.1 send unsupported OCPP 1.6 messages when in OCPP 1.6 mode,
+    // which can cause the charger to wait for a response until it times out, so we need to reply with a CallError NotSupported immediately
+
+    const rawAction = message[2];
+
+    if (protocol === 'ocpp1.6' && rawAction === 'SecurityEventNotification') {
+      this._logger.debug(
+        `Ignoring unsupported OCPP 1.6 action '${rawAction}' from ${identifier} (stationId=${stationId}, tenantId=${tenantId}, messageId=${messageId})`,
+      );
+
+      // Reply with CALLERROR NotSupported so the charger doesn't wait/timeout
+      const ocppErr = new OcppError(
+        messageId,
+        ErrorCode.NotSupported,
+        `Action not supported in OCPP 1.6: ${rawAction}`,
+      );
+
+      let callError = this.removeNulls(ocppErr.asCallError());
+      const rawMessage = JSON.stringify(callError);
+      await this._sendMessage(identifier, protocol, rawMessage, callError);
+      return;
+    }
+    // ---- END of SecurityEventNotification patch ----
+
     try {
       action = mapToCallAction(protocol, message[2]);
       const isAllowed = await this._onCallIsAllowed(action, identifier);
